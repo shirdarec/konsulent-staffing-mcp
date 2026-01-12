@@ -45,9 +45,6 @@ graph TB
     style LVA fill:#fff4e1
     style CLIENT fill:#e8f5e9
     style KA_DATA fill:#f3e5f5
-    style NET fill:#f5f5f5
-    style LVA_CONTAINER fill:#fff9e6
-    style KA_CONTAINER fill:#e6f4ff
 ```
 
 ### Dataflyt
