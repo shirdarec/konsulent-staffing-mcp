@@ -2,13 +2,28 @@ from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 import httpx
+from openai import OpenAI
+import os
+import logging
 
 app = FastAPI(title="LLM Verktøy API", version="1.0.0")
 
-# URL til konsulent-api (vil bli satt via miljøvariabel eller default)
-# Bruker localhost for lokal kjøring, konsulent-api for Docker (satt via miljøvariabel)
-import os
+# Konfigurasjon
 KONSULENT_API_URL = os.getenv("KONSULENT_API_URL", "http://localhost:8000")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-3.5-turbo")  # Kostnadseffektiv modell
+
+# Sett opp OpenRouter klient
+openrouter_client = None
+if OPENROUTER_API_KEY:
+    openrouter_client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=OPENROUTER_API_KEY,
+    )
+
+# Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class Konsulent(BaseModel):
@@ -65,8 +80,8 @@ def filtrer_konsulenter(
     return filtrerte
 
 
-def generer_sammendrag(konsulenter: List[Konsulent], min_tilgjengelighet_prosent: float, påkrevd_ferdighet: str) -> str:
-    """Genererer menneskeleselig sammendrag av filtrerte konsulenter"""
+def generer_sammendrag_fallback(konsulenter: List[Konsulent], min_tilgjengelighet_prosent: float, påkrevd_ferdighet: str) -> str:
+    """Fallback: Genererer sammendrag uten LLM hvis OpenRouter ikke er tilgjengelig"""
     if not konsulenter:
         return f"Fant ingen konsulenter med minst {min_tilgjengelighet_prosent}% tilgjengelighet og ferdigheten '{påkrevd_ferdighet}'."
     
@@ -81,6 +96,68 @@ def generer_sammendrag(konsulenter: List[Konsulent], min_tilgjengelighet_prosent
     sammendrag += " " + ". ".join(detaljer) + "."
     
     return sammendrag
+
+
+async def generer_sammendrag_med_llm(
+    konsulenter: List[Konsulent], 
+    min_tilgjengelighet_prosent: float, 
+    påkrevd_ferdighet: str
+) -> str:
+    """Genererer menneskeleselig sammendrag ved hjelp av OpenRouter LLM"""
+    
+    # Hvis ingen konsulenter, returner umiddelbart
+    if not konsulenter:
+        return f"Fant ingen konsulenter med minst {min_tilgjengelighet_prosent}% tilgjengelighet og ferdigheten '{påkrevd_ferdighet}'."
+    
+    # Hvis OpenRouter ikke er konfigurert, bruk fallback
+    if not openrouter_client:
+        logger.warning("OpenRouter ikke konfigurert, bruker fallback")
+        return generer_sammendrag_fallback(konsulenter, min_tilgjengelighet_prosent, påkrevd_ferdighet)
+    
+    # Bygg konsulent-data for prompt
+    konsulent_info = []
+    for konsulent in konsulenter:
+        tilgjengelighet = beregn_tilgjengelighet(konsulent.belastning_prosent)
+        konsulent_info.append(
+            f"- {konsulent.navn}: {tilgjengelighet:.0f}% tilgjengelighet, "
+            f"ferdigheter: {', '.join(konsulent.ferdigheter)}"
+        )
+    
+    # Bygg prompt
+    prompt = f"""Du er en assistent som hjelper med konsulent-staffing. 
+
+Basert på følgende filtrerte konsulenter, generer et kort og menneskeleselig sammendrag på norsk.
+
+Krav:
+- Minimum tilgjengelighet: {min_tilgjengelighet_prosent}%
+- Påkrevd ferdighet: {påkrevd_ferdighet}
+
+Konsulenter som matcher kriteriene:
+{chr(10).join(konsulent_info)}
+
+Generer et kort sammendrag som oppsummerer antall funnet konsulenter og deres tilgjengelighet. 
+Hold det profesjonelt og konsist."""
+    
+    try:
+        # Kall OpenRouter API
+        response = openrouter_client.chat.completions.create(
+            model=OPENROUTER_MODEL,
+            messages=[
+                {"role": "system", "content": "Du er en hjelpsom assistent som genererer profesjonelle sammendrag på norsk."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,  # Lavere temperatur for mer konsistente resultater
+            max_tokens=200
+        )
+        
+        sammendrag = response.choices[0].message.content.strip()
+        logger.info(f"Generert sammendrag med LLM: {OPENROUTER_MODEL}")
+        return sammendrag
+        
+    except Exception as e:
+        logger.error(f"Feil ved kall til OpenRouter: {str(e)}")
+        # Fallback til enkel tekst-generering hvis LLM feiler
+        return generer_sammendrag_fallback(konsulenter, min_tilgjengelighet_prosent, påkrevd_ferdighet)
 
 
 @app.get("/")
@@ -107,8 +184,8 @@ async def get_tilgjengelige_konsulenter_sammendrag(
         påkrevd_ferdighet
     )
     
-    # Generer sammendrag
-    sammendrag = generer_sammendrag(
+    # Generer sammendrag med LLM via OpenRouter
+    sammendrag = await generer_sammendrag_med_llm(
         filtrerte,
         min_tilgjengelighet_prosent,
         påkrevd_ferdighet

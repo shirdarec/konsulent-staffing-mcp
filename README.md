@@ -9,28 +9,29 @@ Løsningen består av to mikrotjenester:
 1. **konsulent-api** (Port 8000): Server som eksponerer konsulentdata
    - Endepunkt: `GET /konsulenter` - Returnerer hardkodet liste med konsulenter
 
-2. **llm-verktøy-api** (Port 8001): Klient som filtrerer og sammendragstiller konsulenter
-   - Endepunkt: `GET /tilgjengelige-konsulenter/sammendrag` - Returnerer menneskeleselig sammendrag
+2. **llm-verktøy-api** (Port 8001): Klient som filtrerer og sammendragstiller konsulenter ved hjelp av LLM
+   - Endepunkt: `GET /tilgjengelige-konsulenter/sammendrag` - Returnerer LLM-generert menneskeleselig sammendrag
+   - Bruker OpenRouter API for å generere sammendrag med AI-modell
 
 ### Systemdiagram
 
 ```mermaid
 graph TB
+    CLIENT["AI-assistent"]
+    
     subgraph NET["Docker Network: konsulent-network"]
-        subgraph KA_CONTAINER["Container: konsulent-api"]
-            KA["FastAPI Server<br/>Port 8000"]
-            KA_EP["GET /konsulenter<br/>GET /health"]
-            KA_DATA[("Hardkodet<br/>Konsulent Data")]
-        end
-        
         subgraph LVA_CONTAINER["Container: llm-verktøy-api"]
             LVA["FastAPI Server<br/>Port 8001"]
-            LVA_EP["GET /tilgjengelige-konsulenter/sammendrag<br/>GET /health"]
+            LVA_EP["GET /tilgjengelige-konsulenter/sammendrag"]
             LVA_LOGIC["Filtreringslogikk<br/>Sammendrag-generering"]
         end
+        
+        subgraph KA_CONTAINER["Container: konsulent-api"]
+            KA["FastAPI Server<br/>Port 8000"]
+            KA_EP["GET /konsulenter"]
+            KA_DATA[("Hardkodet<br/>Konsulent Data")]
+        end
     end
-    
-    CLIENT["AI-assistent"]
     
     CLIENT -->|"1. Request med<br/>filter-parametre"| LVA_EP
     LVA_EP --> LVA_LOGIC
@@ -44,6 +45,9 @@ graph TB
     style LVA fill:#fff4e1
     style CLIENT fill:#e8f5e9
     style KA_DATA fill:#f3e5f5
+    style NET fill:#f5f5f5
+    style LVA_CONTAINER fill:#fff9e6
+    style KA_CONTAINER fill:#e6f4ff
 ```
 
 ### Dataflyt
@@ -128,6 +132,31 @@ GET http://localhost:8001/tilgjengelige-konsulenter/sammendrag?min_tilgjengeligh
 ```
 
 **Swagger UI:** http://localhost:8001/docs
+
+## LLM og Modellvalg
+
+Løsningen bruker **OpenRouter API** for å generere menneskeleselige sammendrag via en AI-modell.
+
+### Valgt Modell: `openai/gpt-3.5-turbo`
+
+**Begrunnelse for modellvalg:**
+
+1. **Kostnadseffektivitet**: GPT-3.5-turbo er en av de mest kostnadseffektive modellene på OpenRouter, viktig med tanke på $5 credit limit.
+
+2. **Hastighet**: Modellen har lav latency, viktig for API-responser.
+
+3. **Kvalitet**: GPT-3.5-turbo leverer gode resultater for tekstgenerering på norsk, som er tilstrekkelig for å generere profesjonelle sammendrag.
+
+4. **Konsistens**: Med `temperature=0.3` sikrer vi mer konsistente og forutsigbare resultater.
+
+5. **Kompatibilitet**: OpenRouter er kompatibel med OpenAI API, noe som gjør integrasjonen enkel.
+
+**Alternativer vurdert:**
+- `anthropic/claude-3-haiku`: Raskere, men høyere kostnad
+- `meta-llama/llama-3.2-3b-instruct`: Gratis, men lavere kvalitet på norsk
+- `openai/gpt-4`: Høyere kvalitet, men for dyr for denne brukssaken
+
+**Fallback-mekanisme**: Hvis OpenRouter API ikke er tilgjengelig eller feiler, faller løsningen tilbake til en enkel tekst-generering uten LLM.
 
 ## Testing
 

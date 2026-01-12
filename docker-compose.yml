@@ -25,6 +25,8 @@ services:
       - "8001:8001"
     environment:
       - KONSULENT_API_URL=http://konsulent-api:8000
+      - OPENROUTER_API_KEY=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
+      - OPENROUTER_MODEL=openai/gpt-3.5-turbo
     depends_on:
       konsulent-api:
         condition: service_healthy
