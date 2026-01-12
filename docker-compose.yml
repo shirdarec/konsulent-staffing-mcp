@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  konsulent-api:
+    build:
+      context: ./konsulent-api
+      dockerfile: Dockerfile
+    container_name: konsulent-api
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - konsulent-network
+
+  llm-verktøy-api:
+    build:
+      context: ./llm-verktøy-api
+      dockerfile: Dockerfile
+    container_name: llm-verktøy-api
+    ports:
+      - "8001:8001"
+    environment:
+      - KONSULENT_API_URL=http://konsulent-api:8000
+    depends_on:
+      konsulent-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - konsulent-network
+
+networks:
+  konsulent-network:
+    driver: bridge
+
