@@ -16,30 +16,29 @@ Løsningen består av to mikrotjenester:
 
 ```mermaid
 graph TB
-    subgraph "Docker Network: konsulent-network"
-        subgraph "Container: konsulent-api"
-            KA[FastAPI Server<br/>Port 8000]
-            KA_EP[GET /konsulenter<br/>GET /health]
-            KA_DATA[(Hardkodet<br/>Konsulent Data)]
+    subgraph NET["Docker Network: konsulent-network"]
+        subgraph KA_CONTAINER["Container: konsulent-api"]
+            KA["FastAPI Server<br/>Port 8000"]
+            KA_EP["GET /konsulenter<br/>GET /health"]
+            KA_DATA[("Hardkodet<br/>Konsulent Data")]
         end
         
-        subgraph "Container: llm-verktøy-api"
-            LVA[FastAPI Server<br/>Port 8001]
-            LVA_EP[GET /tilgjengelige-konsulenter/sammendrag<br/>GET /health]
-            LVA_LOGIC[Filtreringslogikk<br/>Sammendrag-generering]
+        subgraph LVA_CONTAINER["Container: llm-verktøy-api"]
+            LVA["FastAPI Server<br/>Port 8001"]
+            LVA_EP["GET /tilgjengelige-konsulenter/sammendrag<br/>GET /health"]
+            LVA_LOGIC["Filtreringslogikk<br/>Sammendrag-generering"]
         end
     end
     
-    CLIENT[AI-assistent / Klient]
+    CLIENT["AI-assistent"]
     
-    CLIENT -->|"1. GET /tilgjengelige-konsulenter/sammendrag<br/>?min_tilgjengelighet_prosent=50<br/>&påkrevd_ferdighet=python"| LVA_EP
+    CLIENT -->|"1. Request med<br/>filter-parametre"| LVA_EP
     LVA_EP --> LVA_LOGIC
     LVA_LOGIC -->|"2. GET /konsulenter"| KA_EP
     KA_EP --> KA_DATA
-    KA_DATA -->|"3. JSON: Liste med konsulenter<br/>(id, navn, ferdigheter, belastning_prosent)"| LVA_LOGIC
-    LVA_LOGIC -->|"4. Filtrerer basert på:<br/>- Tilgjengelighet >= 50%<br/>- Ferdighet = 'python'"| LVA_LOGIC
-    LVA_LOGIC -->|"5. Genererer sammendrag"| LVA_EP
-    LVA_EP -->|"6. JSON: {sammendrag: '...'}"| CLIENT
+    KA_DATA -->|"3. JSON: Liste med<br/>konsulenter"| LVA_LOGIC
+    LVA_LOGIC -->|"4. Filtrerer og<br/>genererer sammendrag"| LVA_EP
+    LVA_EP -->|"5. JSON: {sammendrag}"| CLIENT
     
     style KA fill:#e1f5ff
     style LVA fill:#fff4e1
