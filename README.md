@@ -1,6 +1,6 @@
-# MCP Løsning for Konsulent-Staffing
+# Konsulent-Staffing API (MCP-inspirert løsning)
 
-Dette er en MCP-basert løsning for konsulent-staffing som består av to mikrotjenester bygget med Python og FastAPI.
+Dette er en løsning for konsulent-staffing som består av to mikrotjenester bygget med Python og FastAPI. Løsningen er designet for å kunne brukes av AI-assistenter, og er implementert som REST API (se [MCP vs REST API](#mcp-model-context-protocol-vs-rest-api) for begrunnelse).
 
 ## Arkitektur
 
@@ -129,6 +129,49 @@ GET http://localhost:8001/tilgjengelige-konsulenter/sammendrag?min_tilgjengeligh
 ```
 
 **Swagger UI:** http://localhost:8001/docs
+
+## MCP (Model Context Protocol) vs REST API
+
+### Valg av REST API
+
+Løsningen er implementert som **REST API** i stedet for full MCP-protokoll, av følgende grunner:
+
+1. **Oppgavens spesifikasjon**: Oppgaven spesifiserte konkrete REST-endepunkter (`GET /konsulenter`, `GET /tilgjengelige-konsulenter/sammendrag`), noe som tyder på at REST API var den ønskede tilnærmingen.
+
+2. **Enkelhet og klarhet**: REST API er mer direkte for denne brukssaken, med tydelige HTTP-endepunkter som er enkle å teste og dokumentere.
+
+3. **Kompatibilitet**: REST API kan enkelt konsumeres av både tradisjonelle klienter og AI-assistenter via HTTP-kall.
+
+### Hva ville vært nødvendig for ekte MCP-implementering?
+
+For en fullstendig MCP-server ville vi trengt:
+
+- **FastMCP eller MCP SDK**: Bibliotek for å implementere MCP-protokollen
+- **Tool-definisjoner**: Verktøy definert med `@mcp.tool()` dekoratører
+- **Schema discovery**: Automatisk oppdagelse av tilgjengelige verktøy
+- **Streamable HTTP transport**: MCP krever spesifikk transport-lag
+- **Autentisering**: Bearer tokens eller JWT for sikkerhet
+
+**Eksempel på MCP-implementering:**
+```python
+from fastapi import FastAPI
+from mcp.server.fastmcp import FastMCP
+
+app = FastAPI()
+mcp = FastMCP(name="Konsulent Staffing MCP")
+
+@mcp.tool()
+async def hent_tilgjengelige_konsulenter(
+    min_tilgjengelighet: float,
+    påkrevd_ferdighet: str
+) -> dict:
+    """Hent tilgjengelige konsulenter basert på kriterier."""
+    # Implementasjon...
+    return {"sammendrag": "..."}
+
+app.mount("/mcp", mcp.streamable_http_app())
+```
+
 
 ## LLM og Modellvalg
 
